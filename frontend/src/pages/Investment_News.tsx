@@ -2,37 +2,7 @@ import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { CSpinner } from '@coreui/react'
 import '@coreui/coreui/dist/css/coreui.min.css'
-
-interface Article {
-  title: string
-  description: string
-  url: string
-  source: string | null
-  publishedAt: string
-  urlToImage: string | null
-  sentiment: 'positive' | 'negative' | 'neutral'
-  compound: number
-  positive: number
-  negative: number
-  neutral: number
-}
-
-interface NewsResponse {
-  ticker: string
-  total: number
-  articles: Article[]
-}
-
-async function fetchNewsSentiment(ticker: string): Promise<NewsResponse> {
-  const res = await fetch(
-    `http://localhost:8000/news/sentiment?ticker=${encodeURIComponent(ticker)}`
-  )
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: 'Request failed' }))
-    throw new Error(err.detail ?? 'Failed to fetch news')
-  }
-  return res.json()
-}
+import { newsApi, type Article, type NewsSentimentResponse as NewsResponse } from '../services/api'
 
 const SENTIMENT_STYLES = {
   positive: {
@@ -178,7 +148,7 @@ const InvestmentNews: React.FC = () => {
 
   const { data, isLoading, isError, error } = useQuery<NewsResponse, Error>({
     queryKey: ['news-sentiment', ticker],
-    queryFn: () => fetchNewsSentiment(ticker),
+    queryFn: () => newsApi.getSentiment(ticker),
     enabled: ticker.length > 0,
   })
 
