@@ -41,4 +41,5 @@ urllib3==2.6.3
 uvicorn==0.42.0
 uvloop==0.22.1
 watchfiles==1.1.1
+vaderSentiment==3.3.2
 websockets==16.0
