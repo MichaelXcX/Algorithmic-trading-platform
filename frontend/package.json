@@ -20,7 +20,8 @@
     "react-bootstrap": "^2.10.10",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.14.0",
-    "tailwind": "^4.0.0"
+    "tailwind": "^4.0.0",
+    "recharts": "^3.8.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

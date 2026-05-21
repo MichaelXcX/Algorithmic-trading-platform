@@ -1,13 +1,28 @@
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+
+from schemas import ForecastResponse
+from services.forecast_service import get_stock_forecast
 import os
 import httpx
 from dotenv import load_dotenv
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 load_dotenv()
+app = FastAPI(
+    title="Stock Forecast API",
+    description="API simplu pentru predicția prețurilor acțiunilor",
+    version="1.0.0"
+)
 
-app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -31,7 +46,7 @@ def read_item(item_id: int, q: str = None):
 
 @app.get("/news/sentiment")
 async def get_news_sentiment(
-    ticker: str = Query(..., description="Stock ticker or company name (e.g. AAPL, Tesla)")
+    ticker: str = Query(..., description="Stock ticker or company name (e.g. AAPL, Tesla)")  # noqa: F821
 ):
     api_key = os.getenv("NEWS_API_KEY")
     if not api_key:
@@ -95,3 +110,12 @@ async def get_news_sentiment(
         "total": len(articles),
         "articles": articles,
     }
+@app.get("/forecast/{symbol}", response_model=ForecastResponse)
+def forecast_stock(symbol: str):
+    try:
+        result = get_stock_forecast(symbol)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Eroare internă: {str(e)}")
