@@ -1,14 +1,15 @@
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-
-from schemas import ForecastResponse
-from services.forecast_service import get_stock_forecast
+from transformers import pipeline
 import os
 import httpx
 from dotenv import load_dotenv
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+
+from schemas import ForecastResponse
+from services.forecast_service import get_stock_forecast
 
 load_dotenv()
+
 app = FastAPI(
     title="Stock Forecast API",
     description="API simplu pentru predicția prețurilor acțiunilor",
@@ -17,21 +18,21 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+# FinBERT se încarcă o singură dată la startup
+print("Se încarcă modelul FinBERT...")
+_finbert = pipeline(
+    "text-classification",
+    model="ProsusAI/finbert",
+    tokenizer="ProsusAI/finbert",
+    device=-1  # CPU; schimbă în 0 dacă ai GPU
 )
-
-_analyzer = SentimentIntensityAnalyzer()
+print("FinBERT încărcat!")
 
 
 @app.get("/")
@@ -46,7 +47,7 @@ def read_item(item_id: int, q: str = None):
 
 @app.get("/news/sentiment")
 async def get_news_sentiment(
-    ticker: str = Query(..., description="Stock ticker or company name (e.g. AAPL, Tesla)")  # noqa: F821
+    ticker: str = Query(..., description="Stock ticker or company name (e.g. AAPL, Tesla)")
 ):
     api_key = os.getenv("NEWS_API_KEY")
     if not api_key:
@@ -71,7 +72,6 @@ async def get_news_sentiment(
         raise HTTPException(status_code=502, detail="Failed to reach NewsAPI")
 
     data = resp.json()
-
     if data.get("status") != "ok":
         raise HTTPException(status_code=502, detail=data.get("message", "NewsAPI returned an error"))
 
@@ -79,17 +79,26 @@ async def get_news_sentiment(
     for article in data.get("articles", []):
         title = article.get("title") or ""
         description = article.get("description") or ""
-        text = f"{title}. {description}"
 
-        scores = _analyzer.polarity_scores(text)
-        compound = scores["compound"]
+        # FinBERT acceptă max 512 tokens — trunchiem textul ca să fim siguri
+        text = f"{title}. {description}"[:512]
 
-        if compound >= 0.05:
-            sentiment = "positive"
-        elif compound <= -0.05:
-            sentiment = "negative"
+        result = _finbert(text)[0]
+        label = result["label"].lower()   # "positive", "negative", "neutral"
+        score = round(result["score"], 4) # scorul de încredere al labelului prezis
+
+        # Construim scorurile individuale pentru compatibilitate cu frontend-ul
+        positive = score if label == "positive" else round((1 - score) / 2, 4)
+        negative = score if label == "negative" else round((1 - score) / 2, 4)
+        neutral  = score if label == "neutral"  else round((1 - score) / 2, 4)
+
+        # compound: număr între -1 și +1, compatibil cu ce așteaptă frontend-ul
+        if label == "positive":
+            compound = score
+        elif label == "negative":
+            compound = -score
         else:
-            sentiment = "neutral"
+            compound = 0.0
 
         articles.append({
             "title": title,
@@ -98,11 +107,11 @@ async def get_news_sentiment(
             "source": article.get("source", {}).get("name"),
             "publishedAt": article.get("publishedAt"),
             "urlToImage": article.get("urlToImage"),
-            "sentiment": sentiment,
+            "sentiment": label,
             "compound": round(compound, 4),
-            "positive": round(scores["pos"], 4),
-            "negative": round(scores["neg"], 4),
-            "neutral": round(scores["neu"], 4),
+            "positive": positive,
+            "negative": negative,
+            "neutral": neutral,
         })
 
     return {
@@ -110,6 +119,8 @@ async def get_news_sentiment(
         "total": len(articles),
         "articles": articles,
     }
+
+
 @app.get("/forecast/{symbol}", response_model=ForecastResponse)
 def forecast_stock(symbol: str):
     try:
