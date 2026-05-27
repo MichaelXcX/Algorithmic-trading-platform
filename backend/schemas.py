@@ -8,3 +8,123 @@ class ForecastResponse(BaseModel):
     historical_prices: List[float]
     forecast_dates: List[str]
     forecast_prices: List[float]
+
+
+class RegimeStateResponse(BaseModel):
+    current_state: int
+    state_name: str
+    state_probs: List[float]
+    transition_matrix: List[List[float]]
+
+
+class LSTMForecastResponse(BaseModel):
+    symbol: str
+    mean_return: float
+    log_sigma: float
+    uncertainty: float
+    regime_state: int
+    regime_name: str
+
+
+class LSTMForecastPerAsset(BaseModel):
+    mu: float
+    uncertainty: float
+
+
+class PortfolioRequest(BaseModel):
+    symbols: List[str]
+    period: str = "2y"
+
+
+class PortfolioAllocationResponse(BaseModel):
+    symbols: List[str]
+    weights: List[float]
+    lstm_forecasts: dict
+    regime_state: int
+    regime_name: str
+    timestamp: str
+
+
+class TrainRequest(BaseModel):
+    symbols: List[str]
+    epochs_per_fold: int = 10
+
+
+class TrainResponse(BaseModel):
+    symbols: List[str]
+    folds_completed: int
+    history: List[dict]
+
+
+# ── Alpaca ────────────────────────────────────────────────────────────────────
+
+class AlpacaStatusResponse(BaseModel):
+    configured: bool
+    paper: bool
+
+
+class AlpacaAccountResponse(BaseModel):
+    equity: float
+    last_equity: float
+    day_pl: float
+    day_plpc: float
+    buying_power: float
+    cash: float
+    portfolio_value: float
+    status: str
+    paper: bool
+
+
+class AlpacaPosition(BaseModel):
+    symbol: str
+    qty: float
+    side: str
+    avg_entry_price: float
+    current_price: float
+    market_value: float
+    cost_basis: float
+    unrealized_pl: float
+    unrealized_plpc: float
+    change_today: float
+
+
+class AlpacaSeedRequest(BaseModel):
+    symbols: List[str] = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'JPM', 'JNJ', 'XOM', 'META', 'TSLA']
+    use_fraction: float = 0.9
+
+
+class AlpacaSeedOrderResult(BaseModel):
+    symbol: str
+    notional: float
+    order_id: str
+    status: str
+
+
+class AlpacaSeedOrderError(BaseModel):
+    symbol: str
+    error: str
+
+
+class AlpacaSeedResponse(BaseModel):
+    orders: List[AlpacaSeedOrderResult]
+    errors: List[AlpacaSeedOrderError]
+    total_deployed: float
+    buying_power_before: float
+
+
+class AlpacaHistoryResponse(BaseModel):
+    timestamps: List[str]
+    equity: List[float | None]
+    profit_loss: List[float | None]
+    profit_loss_pct: List[float | None]
+    base_value: float
+
+
+class HMMFitRequest(BaseModel):
+    symbols: List[str]
+
+class HMMStatusResponse(BaseModel):
+    fitted: bool
+    running: bool
+    n_features: int | None
+    error: str | None

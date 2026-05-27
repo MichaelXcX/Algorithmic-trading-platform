@@ -13,3 +13,4 @@ frontend/.env
 
 # Misc
 .DS_Store
+checkpoints/

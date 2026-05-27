@@ -10,7 +10,7 @@ import {
 } from '@coreui/react'
 import { NavLink } from "react-router-dom"; // NavLink e mai bun pentru meniuri decât Link
 import CIcon from '@coreui/icons-react'
-import { cilStorage, cilMemory, cilNewspaper, cilAddressBook, cilBook, cilNotes, cilSpreadsheet } from '@coreui/icons'
+import { cilStorage, cilMemory, cilNewspaper, cilAddressBook, cilBook, cilNotes, cilSpreadsheet, cilGraph } from '@coreui/icons'
 
 export const SidebarUnfoldableExample = () => {
   return (
@@ -36,6 +36,12 @@ export const SidebarUnfoldableExample = () => {
         <CNavItem>
           <CNavLink as={NavLink} to="/stock_forcasting">
             <CIcon customClassName="nav-icon" icon={cilMemory} /> Stock Forcasting
+          </CNavLink>
+        </CNavItem>
+
+        <CNavItem>
+          <CNavLink as={NavLink} to="/regime">
+            <CIcon customClassName="nav-icon" icon={cilGraph} /> Market Regime
           </CNavLink>
         </CNavItem>
 
