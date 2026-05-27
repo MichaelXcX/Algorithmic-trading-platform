@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI, Query, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -14,6 +16,8 @@ from schemas import (
     AlpacaHistoryResponse,
     AlpacaSeedRequest,
     AlpacaSeedResponse,
+    HMMFitRequest,
+    HMMStatusResponse,
 )
 from services.forecast_service import get_stock_forecast
 from services import portfolio_service
@@ -22,6 +26,8 @@ import os
 import httpx
 from dotenv import load_dotenv
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 app = FastAPI(
@@ -215,6 +221,78 @@ def training_status():
         "running": _training_status["running"],
         "last_result": _training_status.get("last_result"),
     }
+
+
+# ---------------------------------------------------------------------------
+# HMM fitting (non-blocking)
+# ---------------------------------------------------------------------------
+
+_hmm_fit_status_global: dict = {"running": False}
+
+
+@app.post("/hmm/fit")
+def hmm_fit(req: HMMFitRequest, background_tasks: BackgroundTasks):
+    status = portfolio_service.get_hmm_status()
+    if status["running"]:
+        raise HTTPException(status_code=409, detail="HMM fitting already in progress")
+    symbols = [s.strip().upper() for s in req.symbols if s.strip()]
+    if len(symbols) < 2:
+        raise HTTPException(status_code=422, detail="Provide at least 2 symbols")
+    background_tasks.add_task(portfolio_service.fit_hmm, symbols)
+    return {"status": "fitting_started", "symbols": symbols}
+
+
+@app.get("/hmm/fit/status", response_model=HMMStatusResponse)
+def hmm_fit_status():
+    return portfolio_service.get_hmm_status()
+
+
+# ---------------------------------------------------------------------------
+# MLflow runs
+# ---------------------------------------------------------------------------
+
+@app.get("/mlflow/runs")
+def mlflow_runs(n: int = Query(20, ge=1, le=100)):
+    try:
+        import mlflow
+        from mlflow.tracking import MlflowClient
+        client = MlflowClient(tracking_uri=portfolio_service.MLFLOW_URI)
+        exp = client.get_experiment_by_name("algorithmic_trading")
+        if exp is None:
+            return []
+        runs = client.search_runs(
+            experiment_ids=[exp.experiment_id],
+            order_by=["start_time DESC"],
+            max_results=n,
+        )
+        return [
+            {
+                "run_id": r.info.run_id,
+                "run_name": r.info.run_name or "",
+                "status": r.info.status,
+                "start_time": r.info.start_time,
+                "end_time": r.info.end_time,
+                "params": dict(r.data.params),
+                "metrics": dict(r.data.metrics),
+            }
+            for r in runs
+        ]
+    except Exception as e:
+        logger.warning("MLflow runs fetch failed: %s", e)
+        return []
+
+
+@app.get("/mlflow/runs/{run_id}/history")
+def mlflow_run_history(run_id: str, metric: str = Query("train_loss")):
+    try:
+        import mlflow
+        from mlflow.tracking import MlflowClient
+        client = MlflowClient(tracking_uri=portfolio_service.MLFLOW_URI)
+        history = client.get_metric_history(run_id, metric)
+        return [{"step": h.step, "value": h.value} for h in history]
+    except Exception as e:
+        logger.warning("MLflow history fetch failed: %s", e)
+        return []
 
 
 # ---------------------------------------------------------------------------

@@ -91,58 +91,63 @@ class WalkForwardTrainer:
         ohlcv_dict: {symbol: full OHLCV DataFrame}  (for LSTM feature engineering)
         returns_df: log-return DataFrame, columns = symbols, DatetimeIndex aligned
         """
-        avg_returns = returns_df.mean(axis=1).values
-        self.hmm.fit(avg_returns)
+        self.hmm.fit(returns_df.values)
 
-        T = len(returns_df)
-        fold = 0
-        start = MIN_TRAIN_BARS
+        import mlflow
+        mlflow.set_tracking_uri(MLFLOW_URI)
+        mlflow.set_experiment(MLFLOW_EXPERIMENT)
 
-        while start + EMBARGO_BARS + VALIDATION_BARS <= T:
-            train_returns = returns_df.iloc[:start]
-            val_start = start + EMBARGO_BARS
-            val_end = min(val_start + VALIDATION_BARS, T)
-            val_returns = returns_df.iloc[val_start:val_end]
+        with mlflow.start_run(run_name=f"walk_forward_{len(ohlcv_dict)}assets"):
+            mlflow.log_param("symbols", ",".join(ohlcv_dict.keys()))
+            mlflow.log_param("n_assets", len(ohlcv_dict))
+            mlflow.log_param("epochs_per_fold", epochs_per_fold)
+            mlflow.log_param("lambda_sharpe", self.lambda_sharpe)
 
-            # Regime for this training window
-            hmm_state = self.hmm.current_state(train_returns.mean(axis=1).values)
-            hmm_probs = self.hmm.state_probs(train_returns.mean(axis=1).values)
+            T = len(returns_df)
+            fold = 0
+            start = MIN_TRAIN_BARS
 
-            # Build training samples per fold
-            train_samples = self._build_samples(
-                ohlcv_dict, train_returns, hmm_state, hmm_probs
-            )
-            if not train_samples:
+            while start + EMBARGO_BARS + VALIDATION_BARS <= T:
+                train_returns = returns_df.iloc[:start]
+                val_start = start + EMBARGO_BARS
+                val_end = min(val_start + VALIDATION_BARS, T)
+                val_returns = returns_df.iloc[val_start:val_end]
+
+                hmm_state = self.hmm.current_state(train_returns.values)
+                hmm_probs = self.hmm.state_probs(train_returns.values)
+
+                train_samples = self._build_samples(ohlcv_dict, train_returns, hmm_state, hmm_probs)
+                if not train_samples:
+                    start += STEP_BARS
+                    continue
+
+                fold_losses = []
+                for epoch in range(epochs_per_fold):
+                    loss = self._train_step(train_samples, hmm_state)
+                    fold_losses.append(loss)
+
+                val_loss = self._validate(ohlcv_dict, train_returns, val_returns, hmm_state, hmm_probs)
+
+                record = {
+                    "fold": fold,
+                    "train_end": int(start),
+                    "regime": MarketRegimeHMM.STATE_NAMES[hmm_state],
+                    "train_loss": float(np.mean(fold_losses)),
+                    "val_loss": float(val_loss),
+                }
+                self.train_history.append(record)
+                mlflow.log_metrics({"train_loss": record["train_loss"], "val_loss": record["val_loss"]}, step=fold)
+
+                if verbose:
+                    print(
+                        f"Fold {fold:3d} | regime={record['regime']:8s} | "
+                        f"train_loss={record['train_loss']:.4f} | val_loss={record['val_loss']:.4f}"
+                    )
+
+                fold += 1
                 start += STEP_BARS
-                continue
 
-            fold_losses = []
-            for epoch in range(epochs_per_fold):
-                loss = self._train_step(train_samples, hmm_state)
-                fold_losses.append(loss)
-
-            # Validation — pass train_returns so _validate has lookback context
-            val_loss = self._validate(
-                ohlcv_dict, train_returns, val_returns, hmm_state, hmm_probs
-            )
-
-            record = {
-                "fold": fold,
-                "train_end": int(start),
-                "regime": MarketRegimeHMM.STATE_NAMES[hmm_state],
-                "train_loss": float(np.mean(fold_losses)),
-                "val_loss": float(val_loss),
-            }
-            self.train_history.append(record)
-
-            if verbose:
-                print(
-                    f"Fold {fold:3d} | regime={record['regime']:8s} | "
-                    f"train_loss={record['train_loss']:.4f} | val_loss={record['val_loss']:.4f}"
-                )
-
-            fold += 1
-            start += STEP_BARS
+            mlflow.log_metric("folds_completed", fold)
 
         return self.train_history
 

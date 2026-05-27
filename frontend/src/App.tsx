@@ -8,7 +8,7 @@ import Portofolio from './pages/Portofolio'
 import StockForcasting from './pages/Stock_Forcasting'
 import PoliticalNews from './pages/Political_News'
 import InvestmentNews from './pages/Investment_News'
-import Regime from './pages/Regime'
+import Models from './pages/Models'
 import Help from './pages/Help'
 import About from './pages/About'
 import Contact from './pages/Contact'
@@ -38,7 +38,7 @@ const App: React.FC = () => {
             <Route path="/stock_forcasting" element={<StockForcasting />} />
             <Route path="/political_news" element={<PoliticalNews />} />
             <Route path="/investment_news" element={<InvestmentNews />} />
-            <Route path="/regime" element={<Regime />} />
+            <Route path="/models" element={<Models />} />
             <Route path="/help" element={<Help />} />
             <Route path="/about" element={<About />} />
             <Route path="/contact" element={<Contact />} />

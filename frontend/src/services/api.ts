@@ -203,3 +203,41 @@ export const alpacaApi = {
   seed: (symbols = SEED_SYMBOLS, use_fraction = 0.9) =>
     post<AlpacaSeedResult>('/alpaca/seed', { symbols, use_fraction }),
 }
+
+// ── HMM ───────────────────────────────────────────────────────────────────────
+
+export interface HMMStatus {
+  fitted: boolean
+  running: boolean
+  n_features: number | null
+  error: string | null
+}
+
+export const hmmApi = {
+  fit: (symbols: string[]) =>
+    post<{ status: string; symbols: string[] }>('/hmm/fit', { symbols }),
+  getStatus: () => get<HMMStatus>('/hmm/fit/status'),
+}
+
+// ── MLflow ────────────────────────────────────────────────────────────────────
+
+export interface MLflowRun {
+  run_id: string
+  run_name: string
+  status: string
+  start_time: number | null
+  end_time: number | null
+  params: Record<string, string>
+  metrics: Record<string, number>
+}
+
+export interface MLflowMetricPoint {
+  step: number
+  value: number
+}
+
+export const mlflowApi = {
+  getRuns: (n = 20) => get<MLflowRun[]>('/mlflow/runs', { n: String(n) }),
+  getRunHistory: (runId: string, metric: string) =>
+    get<MLflowMetricPoint[]>(`/mlflow/runs/${encodeURIComponent(runId)}/history`, { metric }),
+}
