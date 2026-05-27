@@ -16,8 +16,8 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from 'recharts'
-import { lstmApi } from '../services/api'
-import type { LSTMForecastResponse, RegimeName } from '../services/api'
+import { lstmApi, forecastApi } from '../services/api'
+import type { LSTMForecastResponse, LinearForecastResponse, RegimeName } from '../services/api'
 
 // ── Design tokens ──────────────────────────────────────────────────────────────
 const C = {
@@ -32,13 +32,7 @@ const C = {
 } as const
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-interface ForecastData {
-  symbol: string
-  historical_dates: string[]
-  historical_prices: number[]
-  forecast_dates: string[]
-  forecast_prices: number[]
-}
+type ForecastData = LinearForecastResponse
 
 interface Signal {
   label:       string
@@ -493,12 +487,7 @@ const StockForcasting: React.FC = () => {
     setError(null)
     setData(null)
     try {
-      const res = await fetch(`/api/forecast/${encodeURIComponent(trimmed)}`)
-      if (!res.ok) {
-        const body = await res.json().catch(() => null) as { detail?: string } | null
-        throw new Error(body?.detail ?? `Request failed (${res.status})`)
-      }
-      const json: ForecastData = await res.json() as ForecastData
+      const json = await forecastApi.getForecast(trimmed)
       setData(json)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Unknown error')

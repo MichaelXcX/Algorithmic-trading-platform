@@ -1,3 +1,11 @@
+import os
+# Must be set before any library (torch, xgboost, sklearn) initialises its BLAS/OpenMP
+# runtime. On macOS Apple Silicon, PyTorch and XGBoost each try to own the OpenMP layer
+# and the process segfaults when both are loaded in the same interpreter.
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+
 import logging
 
 from fastapi import FastAPI, Query, HTTPException, BackgroundTasks
@@ -53,7 +61,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-print("FinBERT încărcat!")
+
+_finbert = pipeline(
+    "text-classification",
+    model="ProsusAI/finbert",
+    tokenizer="ProsusAI/finbert",
+    top_k=1,
+)
 
 
 @app.get("/")
@@ -108,7 +122,7 @@ async def get_news_sentiment(
         # FinBERT acceptă max 512 tokens — trunchiem textul ca să fim siguri
         text = f"{title}. {description}"[:512]
 
-        result = _finbert(text)[0]
+        result = _finbert(text)[0][0]
         label = result["label"].lower()   # "positive", "negative", "neutral"
         score = round(result["score"], 4) # scorul de încredere al labelului prezis
 

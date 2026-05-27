@@ -20,6 +20,7 @@ import {
   cilSpreadsheet,
   cilGraph,
   cilSettings,
+  cilLayers,
 } from '@coreui/icons'
 
 export const SidebarUnfoldableExample = () => {

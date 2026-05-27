@@ -124,14 +124,22 @@ def get_signal_classification(symbol: str) -> dict:
     X = combined[FEATURE_COLS].values
     y = combined["_label"].map(LABEL_TO_INT).values
 
-    # Ensure all 3 classes are present; if not, lower threshold and retry
     if len(np.unique(y)) < 2:
         raise ValueError("Variabilitate insuficientă în datele de antrenare")
 
+    # XGBoost 2+ requires 0-indexed consecutive labels; re-encode and keep a
+    # reverse map so predictions can be decoded back to BUY/HOLD/SELL indices.
+    unique_classes = sorted(np.unique(y))
+    to_enc = {orig: enc for enc, orig in enumerate(unique_classes)}
+    to_orig = {enc: orig for enc, orig in enumerate(unique_classes)}
+    y_enc = np.vectorize(to_enc.get)(y)
+
     split = int(len(X) * 0.8)
     X_train, X_test = X[:split], X[split:]
-    y_train, y_test = y[:split], y[split:]
+    y_train, y_test = y_enc[:split], y_enc[split:]
 
+    # nthread=1: prevents XGBoost from initialising its own OpenMP runtime,
+    # which would crash the process on macOS when PyTorch's OpenMP is already loaded.
     model = XGBClassifier(
         n_estimators=150,
         max_depth=4,
@@ -141,6 +149,7 @@ def get_signal_classification(symbol: str) -> dict:
         eval_metric="mlogloss",
         random_state=42,
         verbosity=0,
+        nthread=1,
     )
     model.fit(X_train, y_train)
 
@@ -151,7 +160,8 @@ def get_signal_classification(symbol: str) -> dict:
     if current_features.empty:
         raise ValueError("Nu s-au putut calcula features pentru datele curente")
     X_current = current_features.iloc[-1].values.reshape(1, -1)
-    current_pred_int = int(model.predict(X_current)[0])
+    current_pred_enc = int(model.predict(X_current)[0])
+    current_pred_int = to_orig[current_pred_enc]
     current_probs = model.predict_proba(X_current)[0]
     current_signal = INT_TO_LABEL.get(current_pred_int, "HOLD")
     confidence = round(float(np.max(current_probs)), 3)
@@ -168,14 +178,14 @@ def get_signal_classification(symbol: str) -> dict:
     # Recent signal history from the last 30 rows in combined (labeled data)
     recent_df = combined.tail(30)
     X_recent = recent_df[FEATURE_COLS].values
-    recent_preds = model.predict(X_recent)
+    recent_preds_enc = model.predict(X_recent)
     recent_probs_arr = model.predict_proba(X_recent)
 
     recent_signals = [
         {
             "date": idx.strftime("%Y-%m-%d"),
             "close_price": round(float(row["_close"]), 2),
-            "signal": INT_TO_LABEL.get(int(recent_preds[i]), "HOLD"),
+            "signal": INT_TO_LABEL.get(to_orig[int(recent_preds_enc[i])], "HOLD"),
             "confidence": round(float(np.max(recent_probs_arr[i])), 3),
         }
         for i, (idx, row) in enumerate(recent_df.iterrows())

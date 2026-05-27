@@ -77,6 +77,21 @@ export const regimeApi = {
     get<RegimeStateResponse>('/regime', { symbols: symbols.join(',') }),
 }
 
+// ── Linear regression forecast ────────────────────────────────────────────────
+
+export interface LinearForecastResponse {
+  symbol: string
+  historical_dates: string[]
+  historical_prices: number[]
+  forecast_dates: string[]
+  forecast_prices: number[]
+}
+
+export const forecastApi = {
+  getForecast: (symbol: string) =>
+    get<LinearForecastResponse>(`/forecast/${encodeURIComponent(symbol)}`),
+}
+
 // ── LSTM forecast ─────────────────────────────────────────────────────────────
 
 export interface LSTMForecastResponse {
@@ -292,7 +307,7 @@ export interface SignalResponse {
 }
 
 export const signalApi = {
-  getSignal: (symbol: string) => request<SignalResponse>(`/signal/${encodeURIComponent(symbol)}`),
+  getSignal: (symbol: string) => get<SignalResponse>(`/signal/${encodeURIComponent(symbol)}`),
 }
 
 // ── Strategy Selector ─────────────────────────────────────────────────────────
@@ -328,5 +343,5 @@ export interface StrategyResponse {
 
 export const strategyApi = {
   getStrategy: (symbol: string) =>
-    request<StrategyResponse>(`/strategy/${encodeURIComponent(symbol)}`),
+    get<StrategyResponse>(`/strategy/${encodeURIComponent(symbol)}`),
 }
