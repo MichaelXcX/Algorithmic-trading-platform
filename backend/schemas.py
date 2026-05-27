@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
 
 class ForecastResponse(BaseModel):
@@ -91,6 +91,7 @@ class AlpacaPosition(BaseModel):
 class AlpacaSeedRequest(BaseModel):
     symbols: List[str] = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'JPM', 'JNJ', 'XOM', 'META', 'TSLA']
     use_fraction: float = 0.9
+    weights: Optional[List[float]] = None  # if None, equal weight
 
 
 class AlpacaSeedOrderResult(BaseModel):

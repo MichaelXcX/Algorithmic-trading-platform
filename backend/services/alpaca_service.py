@@ -77,11 +77,16 @@ def get_positions() -> list[dict[str, Any]]:
     ]
 
 
-def seed_portfolio(symbols: list[str], use_fraction: float = 0.9) -> dict[str, Any]:
-    """Place equal-weight notional market orders for each symbol.
+def seed_portfolio(
+    symbols: list[str],
+    use_fraction: float = 0.9,
+    weights: list[float] | None = None,
+) -> dict[str, Any]:
+    """Place weighted notional market orders for each symbol.
 
     Uses DAY time-in-force (required for notional orders by Alpaca).
     Orders queue and execute at next market open if placed outside hours.
+    If weights is None, falls back to equal allocation.
     """
     try:
         from alpaca.trading.requests import MarketOrderRequest  # type: ignore[import]
@@ -94,24 +99,38 @@ def seed_portfolio(symbols: list[str], use_fraction: float = 0.9) -> dict[str, A
     if cash <= 0:
         raise ValueError("No cash available in account")
 
-    per_symbol = round((cash * use_fraction) / len(symbols), 2)
+    if weights is not None:
+        if len(weights) != len(symbols):
+            raise ValueError("weights length must match symbols length")
+        total = sum(weights)
+        if total <= 0:
+            raise ValueError("weights must sum to a positive value")
+        norm = [w / total for w in weights]
+    else:
+        norm = [1.0 / len(symbols)] * len(symbols)
+
+    deployable = cash * use_fraction
     client = _get_client()
 
     orders: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
 
-    for symbol in symbols:
+    for symbol, w in zip(symbols, norm):
+        notional = round(deployable * w, 2)
+        if notional < 1:
+            errors.append({"symbol": symbol, "error": f"notional too small: ${notional}"})
+            continue
         try:
             order_req = MarketOrderRequest(
                 symbol=symbol,
-                notional=per_symbol,
+                notional=notional,
                 side=OrderSide.BUY,
                 time_in_force=TimeInForce.DAY,
             )
             order = client.submit_order(order_req)
             orders.append({
                 "symbol": symbol,
-                "notional": per_symbol,
+                "notional": notional,
                 "order_id": str(order.id),
                 "status": str(order.status),
             })

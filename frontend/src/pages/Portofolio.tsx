@@ -519,9 +519,25 @@ const GNNResults: React.FC<{ result: PortfolioAllocationResponse }> = ({ result 
             <XAxis type="number" tick={{ fill: C.dimmed, fontSize: 11 }} tickFormatter={v => `${v}%`} domain={[0, 'dataMax']} />
             <YAxis type="category" dataKey="symbol" tick={{ fill: C.text, fontSize: 12 }} width={48} />
             <Tooltip
-              contentStyle={{ background: C.card, border: `1px solid ${C.border}` }}
-              labelStyle={{ color: C.text }}
-              formatter={(v) => [`${Number(v).toFixed(2)}%`, 'Weight']}
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null
+                const { symbol, weight } = payload[0].payload as { symbol: string; weight: number }
+                return (
+                  <div style={{
+                    background: 'rgba(15,22,35,0.92)',
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 6,
+                    padding: '4px 10px',
+                    fontSize: 12,
+                    color: C.text,
+                    lineHeight: 1.6,
+                    pointerEvents: 'none',
+                  }}>
+                    <span style={{ fontWeight: 600 }}>{symbol}</span>
+                    <span style={{ color: C.text, marginLeft: 8 }}>{weight.toFixed(2)}%</span>
+                  </div>
+                )
+              }}
             />
             <Bar dataKey="weight" radius={[0, 4, 4, 0]}>
               {weightsData.map((_, i) => <Cell key={i} fill={BAR_PALETTE[i % BAR_PALETTE.length]} />)}
@@ -622,9 +638,22 @@ const Portofolio: React.FC = () => {
     : extraSymbols
   const usingAlpaca = isConnected && hasPositions
 
-  // ── Seed mutation ──
+  // ── Seed ──
+  const [seedMode, setSeedMode] = useState<'equal' | 'ai'>('equal')
+  const [aiSeedWeights, setAiSeedWeights] = useState<{ symbols: string[]; weights: number[] } | null>(null)
+
+  const fetchAiWeightsMut = useMutation({
+    mutationFn: () => portfolioApi.optimize(SEED_SYMBOLS),
+    onSuccess: (data) => setAiSeedWeights({ symbols: data.symbols, weights: data.weights }),
+  })
+
   const seedMut = useMutation({
-    mutationFn: () => alpacaApi.seed(),
+    mutationFn: () => {
+      if (seedMode === 'ai' && aiSeedWeights) {
+        return alpacaApi.seed(aiSeedWeights.symbols, 0.9, aiSeedWeights.weights)
+      }
+      return alpacaApi.seed()
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['alpaca-positions'] })
       void queryClient.invalidateQueries({ queryKey: ['alpaca-account'] })
@@ -701,35 +730,98 @@ const Portofolio: React.FC = () => {
 
               {/* Positions (or seed CTA when empty) */}
               {!hasPositions && !positionsQ.isLoading && !seedMut.data ? (
-                <Card style={{ padding: '28px 24px', textAlign: 'center' as const }}>
-                  <div style={{ fontSize: 32, marginBottom: 12 }}>🌱</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>
-                    Paper account is empty
+                <Card style={{ padding: '28px 24px' }}>
+                  {/* Header */}
+                  <div style={{ textAlign: 'center' as const, marginBottom: 20 }}>
+                    <div style={{ fontSize: 32, marginBottom: 10 }}>🌱</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 6 }}>
+                      Paper account is empty
+                    </div>
+                    <p style={{ color: C.muted, fontSize: 13, lineHeight: 1.6, maxWidth: 380, margin: '0 auto' }}>
+                      Seed it with a diversified 10-stock portfolio across Tech, Finance, Healthcare, and Energy.
+                    </p>
                   </div>
-                  <p style={{ color: C.muted, fontSize: 13, lineHeight: 1.6, maxWidth: 360, margin: '0 auto 20px' }}>
-                    Seed it with a diversified 10-stock portfolio — equal weight across Tech, Finance, Healthcare, and Energy.
-                  </p>
-                  <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 6, justifyContent: 'center', marginBottom: 20 }}>
-                    {SEED_SYMBOLS.map(s => (
-                      <span key={s} style={{
-                        padding: '3px 10px', borderRadius: 20, fontSize: 12,
-                        background: 'rgba(77,171,247,0.08)', border: `1px solid ${C.blue}44`, color: C.blue,
-                      }}>{s}</span>
-                    ))}
+
+                  {/* Mode toggle */}
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+                    <div style={{
+                      display: 'inline-flex', background: C.bg,
+                      border: `1px solid ${C.border}`, borderRadius: 8, padding: 3,
+                    }}>
+                      {(['equal', 'ai'] as const).map(mode => (
+                        <button
+                          key={mode}
+                          onClick={() => { setSeedMode(mode); if (mode === 'ai' && !aiSeedWeights) fetchAiWeightsMut.mutate() }}
+                          style={{
+                            padding: '6px 18px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                            fontSize: 12, fontWeight: 600, transition: 'all 0.15s',
+                            background: seedMode === mode ? C.blue : 'transparent',
+                            color: seedMode === mode ? '#0a0e1a' : C.muted,
+                          }}
+                        >
+                          {mode === 'equal' ? 'Equal Weight' : 'AI Weighted'}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <CButton
-                    color="primary"
-                    onClick={() => seedMut.mutate()}
-                    disabled={seedMut.isPending}
-                    style={{ minWidth: 200 }}
-                  >
-                    {seedMut.isPending
-                      ? <><CSpinner size="sm" className="me-2" />Placing orders…</>
-                      : '🌱 Seed Paper Account'}
-                  </CButton>
-                  <p style={{ fontSize: 11, color: C.dimmed, marginTop: 12, marginBottom: 0 }}>
-                    90% of cash · equal weight · DAY market orders · ~$90k per position
-                  </p>
+
+                  {/* Weight preview */}
+                  {seedMode === 'equal' && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 6, justifyContent: 'center', marginBottom: 20 }}>
+                      {SEED_SYMBOLS.map(s => (
+                        <span key={s} style={{
+                          padding: '3px 10px', borderRadius: 20, fontSize: 12,
+                          background: 'rgba(77,171,247,0.08)', border: `1px solid ${C.blue}44`, color: C.blue,
+                        }}>{s} 10%</span>
+                      ))}
+                    </div>
+                  )}
+                  {seedMode === 'ai' && (
+                    <div style={{ marginBottom: 20, maxWidth: 480, marginLeft: 'auto', marginRight: 'auto' }}>
+                      {fetchAiWeightsMut.isPending && (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.muted, fontSize: 13, padding: '12px 0' }}>
+                          <CSpinner size="sm" /> Fetching AI weights…
+                        </div>
+                      )}
+                      {fetchAiWeightsMut.isError && (
+                        <p style={{ textAlign: 'center' as const, color: C.bear, fontSize: 12 }}>
+                          Could not fetch AI weights — train the model first.
+                        </p>
+                      )}
+                      {aiSeedWeights && aiSeedWeights.symbols.map((sym, i) => {
+                        const w = aiSeedWeights.weights[i] * 100
+                        const color = BAR_PALETTE[i % BAR_PALETTE.length]
+                        return (
+                          <div key={sym} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                            <span style={{ width: 44, fontSize: 11, fontWeight: 700, color: C.text, textAlign: 'right' as const }}>{sym}</span>
+                            <div style={{ flex: 1, background: C.bg, borderRadius: 3, height: 10, overflow: 'hidden' }}>
+                              <div style={{ width: `${Math.min(w, 100)}%`, height: '100%', background: color, borderRadius: 3 }} />
+                            </div>
+                            <span style={{ width: 40, fontSize: 11, fontFamily: C.mono, color: C.muted }}>{w.toFixed(1)}%</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {/* Action */}
+                  <div style={{ textAlign: 'center' as const }}>
+                    <CButton
+                      color="primary"
+                      onClick={() => seedMut.mutate()}
+                      disabled={seedMut.isPending || (seedMode === 'ai' && !aiSeedWeights)}
+                      style={{ minWidth: 220 }}
+                    >
+                      {seedMut.isPending
+                        ? <><CSpinner size="sm" className="me-2" />Placing orders…</>
+                        : seedMode === 'ai' ? '🤖 Seed with AI Weights' : '🌱 Seed Paper Account'}
+                    </CButton>
+                    <p style={{ fontSize: 11, color: C.dimmed, marginTop: 10, marginBottom: 0 }}>
+                      {seedMode === 'equal'
+                        ? '90% of cash · equal weight · DAY market orders'
+                        : '90% of cash · GNN-optimised weights · DAY market orders'}
+                    </p>
+                  </div>
                 </Card>
               ) : (
                 <Card style={{ padding: '18px 20px' }}>

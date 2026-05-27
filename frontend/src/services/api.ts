@@ -200,8 +200,8 @@ export const alpacaApi = {
   getAccount: () => get<AlpacaAccount>('/alpaca/account'),
   getPositions: () => get<AlpacaPosition[]>('/alpaca/positions'),
   getHistory: (period = '1M') => get<AlpacaHistory>('/alpaca/history', { period }),
-  seed: (symbols = SEED_SYMBOLS, use_fraction = 0.9) =>
-    post<AlpacaSeedResult>('/alpaca/seed', { symbols, use_fraction }),
+  seed: (symbols = SEED_SYMBOLS, use_fraction = 0.9, weights?: number[]) =>
+    post<AlpacaSeedResult>('/alpaca/seed', { symbols, use_fraction, ...(weights ? { weights } : {}) }),
 }
 
 // ── HMM ───────────────────────────────────────────────────────────────────────

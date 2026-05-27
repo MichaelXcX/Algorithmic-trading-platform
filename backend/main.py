@@ -348,7 +348,7 @@ def alpaca_seed(req: AlpacaSeedRequest):
     if not symbols:
         raise HTTPException(status_code=422, detail="Provide at least one symbol")
     try:
-        return alpaca_service.seed_portfolio(symbols, use_fraction=req.use_fraction)
+        return alpaca_service.seed_portfolio(symbols, use_fraction=req.use_fraction, weights=req.weights)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
