@@ -8,6 +8,7 @@ import Portofolio from './pages/Portofolio'
 import StockForcasting from './pages/Stock_Forcasting'
 import PoliticalNews from './pages/Political_News'
 import InvestmentNews from './pages/Investment_News'
+import Models from './pages/Models'
 import SignalClassifier from './pages/Signal_Classifier'
 import StrategySelector from './pages/Strategy_Selector'
 import Help from './pages/Help'
@@ -19,14 +20,14 @@ const App: React.FC = () => {
     <div className="d-flex min-vh-100 bg-dark text-white" data-coreui-theme="dark">
       <SidebarUnfoldableExample />
 
-      <div className="flex-grow-1 bg-body text-body">
+      <div className="flex-grow-1 bg-body text-body" style={{ minWidth: 0, overflow: 'hidden' }}>
         <header className="p-3 bg-dark border-bottom border-secondary shadow-sm">
           <CContainer fluid>
             <h4 className="m-0 text-white">Algorithmic Trading Platform</h4>
           </CContainer>
         </header>
 
-        <CContainer fluid className="mt-4">
+        <CContainer fluid className="mt-4 px-4">
           <Routes>
             <Route
               path="/"
@@ -38,11 +39,11 @@ const App: React.FC = () => {
               }
             />
 
-            {/* Rutele trebuie să fie IDENTICE cu cele din sidebar.tsx */}
             <Route path="/portofolio" element={<Portofolio />} />
             <Route path="/stock_forcasting" element={<StockForcasting />} />
             <Route path="/political_news" element={<PoliticalNews />} />
             <Route path="/investment_news" element={<InvestmentNews />} />
+            <Route path="/models" element={<Models />} />
             <Route path="/signal_classifier" element={<SignalClassifier />} />
             <Route path="/strategy_selector" element={<StrategySelector />} />
             <Route path="/help" element={<Help />} />

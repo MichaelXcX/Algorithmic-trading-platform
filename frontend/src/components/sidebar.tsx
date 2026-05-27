@@ -84,6 +84,12 @@ export const SidebarUnfoldableExample = () => {
         </CNavItem>
 
         <CNavItem>
+          <CNavLink as={NavLink} to="/models">
+            <CIcon customClassName="nav-icon" icon={cilLayers} /> Models
+          </CNavLink>
+        </CNavItem>
+
+        <CNavItem>
           <CNavLink as={NavLink} to="/help">
             <CIcon customClassName="nav-icon" icon={cilBook} /> Help
           </CNavLink>

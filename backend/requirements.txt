@@ -47,6 +47,14 @@ yfinance
 pandas
 numpy
 scikit-learn
+# ML models
+torch>=2.0.0
+hmmlearn>=0.3.0
+scipy>=1.10.0
+pandas-ta>=0.3.14b0
+# Alpaca Markets
+alpaca-py>=0.8.0
+mlflow>=2.0.0
 transformers
 torch
 xgboost
