@@ -1,10 +1,13 @@
+from fastapi import FastAPI, Query, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from transformers import pipeline
 import os
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.middleware.cors import CORSMiddleware
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+
+from schemas import ForecastResponse
+from services.forecast_service import get_stock_forecast
 
 from schemas import ForecastResponse, SignalResponse, StrategyResponse
 from services.forecast_service import get_stock_forecast
@@ -27,7 +30,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_analyzer = SentimentIntensityAnalyzer()
+# FinBERT se încarcă o singură dată la startup
+print("Se încarcă modelul FinBERT...")
+_finbert = pipeline(
+    "text-classification",
+    model="ProsusAI/finbert",
+    tokenizer="ProsusAI/finbert",
+    device=-1  # CPU; schimbă în 0 dacă ai GPU
+)
+print("FinBERT încărcat!")
 
 
 @app.get("/")
@@ -67,7 +78,6 @@ async def get_news_sentiment(
         raise HTTPException(status_code=502, detail="Failed to reach NewsAPI")
 
     data = resp.json()
-
     if data.get("status") != "ok":
         raise HTTPException(status_code=502, detail=data.get("message", "NewsAPI returned an error"))
 
@@ -75,17 +85,26 @@ async def get_news_sentiment(
     for article in data.get("articles", []):
         title = article.get("title") or ""
         description = article.get("description") or ""
-        text = f"{title}. {description}"
 
-        scores = _analyzer.polarity_scores(text)
-        compound = scores["compound"]
+        # FinBERT acceptă max 512 tokens — trunchiem textul ca să fim siguri
+        text = f"{title}. {description}"[:512]
 
-        if compound >= 0.05:
-            sentiment = "positive"
-        elif compound <= -0.05:
-            sentiment = "negative"
+        result = _finbert(text)[0]
+        label = result["label"].lower()   # "positive", "negative", "neutral"
+        score = round(result["score"], 4) # scorul de încredere al labelului prezis
+
+        # Construim scorurile individuale pentru compatibilitate cu frontend-ul
+        positive = score if label == "positive" else round((1 - score) / 2, 4)
+        negative = score if label == "negative" else round((1 - score) / 2, 4)
+        neutral  = score if label == "neutral"  else round((1 - score) / 2, 4)
+
+        # compound: număr între -1 și +1, compatibil cu ce așteaptă frontend-ul
+        if label == "positive":
+            compound = score
+        elif label == "negative":
+            compound = -score
         else:
-            sentiment = "neutral"
+            compound = 0.0
 
         articles.append({
             "title": title,
@@ -94,11 +113,11 @@ async def get_news_sentiment(
             "source": article.get("source", {}).get("name"),
             "publishedAt": article.get("publishedAt"),
             "urlToImage": article.get("urlToImage"),
-            "sentiment": sentiment,
+            "sentiment": label,
             "compound": round(compound, 4),
-            "positive": round(scores["pos"], 4),
-            "negative": round(scores["neg"], 4),
-            "neutral": round(scores["neu"], 4),
+            "positive": positive,
+            "negative": negative,
+            "neutral": neutral,
         })
 
     return {

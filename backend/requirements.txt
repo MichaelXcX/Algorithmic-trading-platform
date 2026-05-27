@@ -47,4 +47,6 @@ yfinance
 pandas
 numpy
 scikit-learn
+transformers
+torch
 xgboost
