@@ -14,7 +14,7 @@ async function request<T>(path: string, params?: Record<string, string>): Promis
   return res.json()
 }
 
-// ── News ─────────────────────────────────────────────────────────────────────
+// ── News ──────────────────────────────────────────────────────────────────────
 
 export interface Article {
   title: string
@@ -39,4 +39,79 @@ export interface NewsSentimentResponse {
 export const newsApi = {
   getSentiment: (ticker: string) =>
     request<NewsSentimentResponse>('/news/sentiment', { ticker }),
+}
+
+// ── Signal Classifier ─────────────────────────────────────────────────────────
+
+export interface TechnicalIndicators {
+  rsi: number
+  macd: number
+  macd_signal: number
+  sma20: number
+  sma50: number
+  bb_upper: number
+  bb_lower: number
+  volume_ratio: number
+}
+
+export interface RecentSignalPoint {
+  date: string
+  close_price: number
+  signal: string
+  confidence: number
+}
+
+export interface FeatureImportance {
+  feature: string
+  importance: number
+}
+
+export interface SignalResponse {
+  symbol: string
+  current_signal: string
+  confidence: number
+  feature_importances: FeatureImportance[]
+  recent_signals: RecentSignalPoint[]
+  technical_indicators: TechnicalIndicators
+  model_accuracy: number
+}
+
+export const signalApi = {
+  getSignal: (symbol: string) => request<SignalResponse>(`/signal/${encodeURIComponent(symbol)}`),
+}
+
+// ── Strategy Selector ─────────────────────────────────────────────────────────
+
+export interface StrategyScore {
+  strategy: string
+  score: number
+  description: string
+}
+
+export interface MarketConditions {
+  volatility: number
+  trend_strength: number
+  momentum: number
+  regime: string
+}
+
+export interface BacktestResult {
+  strategy: string
+  total_return: number
+  sharpe_ratio: number
+  win_rate: number
+  max_drawdown: number
+}
+
+export interface StrategyResponse {
+  symbol: string
+  recommended_strategy: string
+  strategy_scores: StrategyScore[]
+  market_conditions: MarketConditions
+  backtest_results: BacktestResult[]
+}
+
+export const strategyApi = {
+  getStrategy: (symbol: string) =>
+    request<StrategyResponse>(`/strategy/${encodeURIComponent(symbol)}`),
 }

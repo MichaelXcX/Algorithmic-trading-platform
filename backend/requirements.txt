@@ -49,3 +49,4 @@ numpy
 scikit-learn
 transformers
 torch
+xgboost
