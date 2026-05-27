@@ -22,14 +22,24 @@ from schemas import (
 from services.forecast_service import get_stock_forecast
 from services import portfolio_service
 from services import alpaca_service
+from transformers import pipeline
 import os
+
 import httpx
 from dotenv import load_dotenv
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+
+from schemas import ForecastResponse
+from services.forecast_service import get_stock_forecast
+
+from schemas import ForecastResponse, SignalResponse, StrategyResponse
+from services.forecast_service import get_stock_forecast
+from services.signal_classifier_service import get_signal_classification
+from services.strategy_selector_service import get_strategy_recommendation
 
 logger = logging.getLogger(__name__)
 
 load_dotenv()
+
 app = FastAPI(
     title="Algorithmic Trading Platform API",
     description="Stock forecasting, regime detection, and GNN portfolio optimisation",
@@ -43,8 +53,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-_analyzer = SentimentIntensityAnalyzer()
+print("FinBERT încărcat!")
 
 
 @app.get("/")
@@ -95,15 +104,27 @@ async def get_news_sentiment(
     for article in data.get("articles", []):
         title = article.get("title") or ""
         description = article.get("description") or ""
-        text = f"{title}. {description}"
-        scores = _analyzer.polarity_scores(text)
-        compound = scores["compound"]
-        if compound >= 0.05:
-            sentiment = "positive"
-        elif compound <= -0.05:
-            sentiment = "negative"
+
+        # FinBERT acceptă max 512 tokens — trunchiem textul ca să fim siguri
+        text = f"{title}. {description}"[:512]
+
+        result = _finbert(text)[0]
+        label = result["label"].lower()   # "positive", "negative", "neutral"
+        score = round(result["score"], 4) # scorul de încredere al labelului prezis
+
+        # Construim scorurile individuale pentru compatibilitate cu frontend-ul
+        positive = score if label == "positive" else round((1 - score) / 2, 4)
+        negative = score if label == "negative" else round((1 - score) / 2, 4)
+        neutral  = score if label == "neutral"  else round((1 - score) / 2, 4)
+
+        # compound: număr între -1 și +1, compatibil cu ce așteaptă frontend-ul
+        if label == "positive":
+            compound = score
+        elif label == "negative":
+            compound = -score
         else:
-            sentiment = "neutral"
+            compound = 0.0
+
         articles.append({
             "title": title,
             "description": description,
@@ -111,19 +132,19 @@ async def get_news_sentiment(
             "source": article.get("source", {}).get("name"),
             "publishedAt": article.get("publishedAt"),
             "urlToImage": article.get("urlToImage"),
-            "sentiment": sentiment,
+            "sentiment": label,
             "compound": round(compound, 4),
-            "positive": round(scores["pos"], 4),
-            "negative": round(scores["neg"], 4),
-            "neutral": round(scores["neu"], 4),
+            "positive": positive,
+            "negative": negative,
+            "neutral": neutral,
         })
 
-    return {"ticker": ticker, "total": len(articles), "articles": articles}
+    return {
+        "ticker": ticker,
+        "total": len(articles),
+        "articles": articles,
+    }
 
-
-# ---------------------------------------------------------------------------
-# Linear-regression forecast (original endpoint — kept for compatibility)
-# ---------------------------------------------------------------------------
 
 @app.get("/forecast/{symbol}", response_model=ForecastResponse)
 def forecast_stock(symbol: str):
@@ -361,3 +382,27 @@ def alpaca_liquidate():
         return alpaca_service.liquidate_all()
     except Exception as exc:
         raise _alpaca_error(exc)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Eroare internă: {str(e)}")
+
+
+@app.get("/signal/{symbol}", response_model=SignalResponse)
+def classify_signal(symbol: str):
+    try:
+        return get_signal_classification(symbol)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Eroare internă: {str(e)}")
+
+
+@app.get("/strategy/{symbol}", response_model=StrategyResponse)
+def select_strategy(symbol: str):
+    try:
+        return get_strategy_recommendation(symbol)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Eroare internă: {str(e)}")

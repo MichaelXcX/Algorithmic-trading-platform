@@ -4,13 +4,23 @@ import {
   CSidebarHeader,
   CSidebarNav,
   CNavGroup,
-  CNavLink, // <-- Folosim CNavLink în loc de CNavItem pentru rute
+  CNavLink,
   CNavItem,
   CNavTitle,
 } from '@coreui/react'
-import { NavLink } from "react-router-dom"; // NavLink e mai bun pentru meniuri decât Link
+import { NavLink } from 'react-router-dom'
 import CIcon from '@coreui/icons-react'
-import { cilStorage, cilMemory, cilNewspaper, cilAddressBook, cilBook, cilNotes, cilSpreadsheet, cilLayers } from '@coreui/icons'
+import {
+  cilStorage,
+  cilMemory,
+  cilNewspaper,
+  cilAddressBook,
+  cilBook,
+  cilNotes,
+  cilSpreadsheet,
+  cilGraph,
+  cilSettings,
+} from '@coreui/icons'
 
 export const SidebarUnfoldableExample = () => {
   return (
@@ -26,13 +36,13 @@ export const SidebarUnfoldableExample = () => {
             <CIcon customClassName="nav-icon" icon={cilSpreadsheet} /> Home
           </CNavLink>
         </CNavItem>
-        
+
         <CNavItem>
           <CNavLink as={NavLink} to="/portofolio">
             <CIcon customClassName="nav-icon" icon={cilStorage} /> Portofolio
           </CNavLink>
         </CNavItem>
-        
+
         <CNavItem>
           <CNavLink as={NavLink} to="/stock_forcasting">
             <CIcon customClassName="nav-icon" icon={cilMemory} /> Stock Forcasting
@@ -51,13 +61,27 @@ export const SidebarUnfoldableExample = () => {
               <span className="nav-icon"><span className="nav-icon-bullet"></span></span> Political
             </CNavLink>
           </CNavItem>
-          
+
           <CNavItem>
             <CNavLink as={NavLink} to="/investment_news">
               <span className="nav-icon"><span className="nav-icon-bullet"></span></span> Investment
             </CNavLink>
           </CNavItem>
         </CNavGroup>
+
+        <CNavTitle>ML Trading</CNavTitle>
+
+        <CNavItem>
+          <CNavLink as={NavLink} to="/signal_classifier">
+            <CIcon customClassName="nav-icon" icon={cilGraph} /> Signal Classifier
+          </CNavLink>
+        </CNavItem>
+
+        <CNavItem>
+          <CNavLink as={NavLink} to="/strategy_selector">
+            <CIcon customClassName="nav-icon" icon={cilSettings} /> Strategy Selector
+          </CNavLink>
+        </CNavItem>
 
         <CNavItem>
           <CNavLink as={NavLink} to="/models">
@@ -70,13 +94,13 @@ export const SidebarUnfoldableExample = () => {
             <CIcon customClassName="nav-icon" icon={cilBook} /> Help
           </CNavLink>
         </CNavItem>
-        
+
         <CNavItem>
           <CNavLink as={NavLink} to="/about">
             <CIcon customClassName="nav-icon" icon={cilNotes} /> About
           </CNavLink>
         </CNavItem>
-        
+
         <CNavItem>
           <CNavLink as={NavLink} to="/contact">
             <CIcon customClassName="nav-icon" icon={cilAddressBook} /> Contact
