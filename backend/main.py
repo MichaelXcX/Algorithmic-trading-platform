@@ -353,3 +353,11 @@ def alpaca_seed(req: AlpacaSeedRequest):
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise _alpaca_error(exc)
+
+
+@app.delete("/alpaca/positions")
+def alpaca_liquidate():
+    try:
+        return alpaca_service.liquidate_all()
+    except Exception as exc:
+        raise _alpaca_error(exc)

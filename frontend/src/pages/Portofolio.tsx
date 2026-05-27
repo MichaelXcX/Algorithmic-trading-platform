@@ -5,7 +5,7 @@ import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
-import { portfolioApi, alpacaApi, stocksApi, SEED_SYMBOLS } from '../services/api'
+import { portfolioApi, alpacaApi, stocksApi, SEED_SYMBOLS, EUROPE_SEED_SYMBOLS } from '../services/api'
 import type {
   PortfolioAllocationResponse,
   AlpacaAccount,
@@ -608,11 +608,14 @@ const Portofolio: React.FC = () => {
     enabled: isConnected,
     refetchInterval: 30_000,
   })
+  const [liquidationPending, setLiquidationPending] = useState(false)
+
   const positionsQ = useQuery({
     queryKey: ['alpaca-positions'],
     queryFn: alpacaApi.getPositions,
     enabled: isConnected,
-    refetchInterval: 30_000,
+    // Poll every 5s while waiting for sell orders to fill, otherwise 30s
+    refetchInterval: liquidationPending ? 5_000 : 30_000,
   })
   const historyQ = useQuery({
     queryKey: ['alpaca-history'],
@@ -631,6 +634,11 @@ const Portofolio: React.FC = () => {
   const equity = accountQ.data?.equity ?? 0
   const hasPositions = positions.length > 0
 
+  // Clear liquidation-pending flag once positions actually reach zero
+  if (liquidationPending && !positionsQ.isLoading && !hasPositions) {
+    setLiquidationPending(false)
+  }
+
   // Alpaca symbols are the base; sector extras extend the optimizer universe
   const alpacaSymbols = positions.map(p => p.symbol)
   const activeSymbols = isConnected && hasPositions
@@ -639,11 +647,17 @@ const Portofolio: React.FC = () => {
   const usingAlpaca = isConnected && hasPositions
 
   // ── Seed ──
-  const [seedMode, setSeedMode] = useState<'equal' | 'ai'>('equal')
+  // Skewed preset: concentrated in top names (same profile for both regions)
+  const SKEWED_WEIGHTS = [25, 20, 15, 10, 8, 7, 6, 4, 3, 2]
+
+  const [seedRegion, setSeedRegion] = useState<'us' | 'eu'>('us')
+  const [seedMode, setSeedMode] = useState<'equal' | 'skewed' | 'ai'>('equal')
   const [aiSeedWeights, setAiSeedWeights] = useState<{ symbols: string[]; weights: number[] } | null>(null)
 
+  const activeSeedSymbols = seedRegion === 'eu' ? EUROPE_SEED_SYMBOLS : SEED_SYMBOLS
+
   const fetchAiWeightsMut = useMutation({
-    mutationFn: () => portfolioApi.optimize(SEED_SYMBOLS),
+    mutationFn: () => portfolioApi.optimize(activeSeedSymbols),
     onSuccess: (data) => setAiSeedWeights({ symbols: data.symbols, weights: data.weights }),
   })
 
@@ -652,9 +666,22 @@ const Portofolio: React.FC = () => {
       if (seedMode === 'ai' && aiSeedWeights) {
         return alpacaApi.seed(aiSeedWeights.symbols, 0.9, aiSeedWeights.weights)
       }
-      return alpacaApi.seed()
+      if (seedMode === 'skewed') {
+        return alpacaApi.seed(activeSeedSymbols, 0.9, SKEWED_WEIGHTS)
+      }
+      return alpacaApi.seed(activeSeedSymbols)
     },
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['alpaca-positions'] })
+      void queryClient.invalidateQueries({ queryKey: ['alpaca-account'] })
+    },
+  })
+
+  // ── Liquidate mutation ──
+  const liquidateMut = useMutation({
+    mutationFn: () => alpacaApi.liquidate(),
+    onSuccess: () => {
+      setLiquidationPending(true)
       void queryClient.invalidateQueries({ queryKey: ['alpaca-positions'] })
       void queryClient.invalidateQueries({ queryKey: ['alpaca-account'] })
     },
@@ -738,8 +765,33 @@ const Portofolio: React.FC = () => {
                       Paper account is empty
                     </div>
                     <p style={{ color: C.muted, fontSize: 13, lineHeight: 1.6, maxWidth: 380, margin: '0 auto' }}>
-                      Seed it with a diversified 10-stock portfolio across Tech, Finance, Healthcare, and Energy.
+                      {seedRegion === 'us'
+                        ? 'Seed with US blue-chips across Tech, Finance, Healthcare, and Energy.'
+                        : 'Seed with European blue-chips — US-listed ADRs across Tech, Pharma, Energy, and Consumer.'}
                     </p>
+                  </div>
+
+                  {/* Region toggle */}
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+                    <div style={{
+                      display: 'inline-flex', background: C.bg,
+                      border: `1px solid ${C.border}`, borderRadius: 8, padding: 3,
+                    }}>
+                      {(['us', 'eu'] as const).map(region => (
+                        <button
+                          key={region}
+                          onClick={() => { setSeedRegion(region); setAiSeedWeights(null) }}
+                          style={{
+                            padding: '5px 20px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                            fontSize: 12, fontWeight: 700, letterSpacing: 0.5, transition: 'all 0.15s',
+                            background: seedRegion === region ? (region === 'eu' ? '#4c6ef5' : C.blue) : 'transparent',
+                            color: seedRegion === region ? '#fff' : C.muted,
+                          }}
+                        >
+                          {region === 'us' ? '🇺🇸 US' : '🇪🇺 Europe'}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   {/* Mode toggle */}
@@ -748,10 +800,10 @@ const Portofolio: React.FC = () => {
                       display: 'inline-flex', background: C.bg,
                       border: `1px solid ${C.border}`, borderRadius: 8, padding: 3,
                     }}>
-                      {(['equal', 'ai'] as const).map(mode => (
+                      {(['equal', 'skewed', 'ai'] as const).map(mode => (
                         <button
                           key={mode}
-                          onClick={() => { setSeedMode(mode); if (mode === 'ai' && !aiSeedWeights) fetchAiWeightsMut.mutate() }}
+                          onClick={() => { setSeedMode(mode); if (mode === 'ai') { setAiSeedWeights(null); fetchAiWeightsMut.mutate() } }}
                           style={{
                             padding: '6px 18px', borderRadius: 6, border: 'none', cursor: 'pointer',
                             fontSize: 12, fontWeight: 600, transition: 'all 0.15s',
@@ -759,7 +811,7 @@ const Portofolio: React.FC = () => {
                             color: seedMode === mode ? '#0a0e1a' : C.muted,
                           }}
                         >
-                          {mode === 'equal' ? 'Equal Weight' : 'AI Weighted'}
+                          {mode === 'equal' ? 'Equal Weight' : mode === 'skewed' ? 'Skewed' : 'AI Weighted'}
                         </button>
                       ))}
                     </div>
@@ -768,12 +820,29 @@ const Portofolio: React.FC = () => {
                   {/* Weight preview */}
                   {seedMode === 'equal' && (
                     <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 6, justifyContent: 'center', marginBottom: 20 }}>
-                      {SEED_SYMBOLS.map(s => (
+                      {activeSeedSymbols.map(s => (
                         <span key={s} style={{
                           padding: '3px 10px', borderRadius: 20, fontSize: 12,
                           background: 'rgba(77,171,247,0.08)', border: `1px solid ${C.blue}44`, color: C.blue,
                         }}>{s} 10%</span>
                       ))}
+                    </div>
+                  )}
+                  {seedMode === 'skewed' && (
+                    <div style={{ marginBottom: 20, maxWidth: 480, marginLeft: 'auto', marginRight: 'auto' }}>
+                      {activeSeedSymbols.map((sym, i) => {
+                        const w = SKEWED_WEIGHTS[i]
+                        const color = BAR_PALETTE[i % BAR_PALETTE.length]
+                        return (
+                          <div key={sym} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                            <span style={{ width: 44, fontSize: 11, fontWeight: 700, color: C.text, textAlign: 'right' as const }}>{sym}</span>
+                            <div style={{ flex: 1, background: C.bg, borderRadius: 3, height: 10, overflow: 'hidden' }}>
+                              <div style={{ width: `${w}%`, height: '100%', background: color, borderRadius: 3 }} />
+                            </div>
+                            <span style={{ width: 40, fontSize: 11, fontFamily: C.mono, color: C.muted }}>{w}%</span>
+                          </div>
+                        )
+                      })}
                     </div>
                   )}
                   {seedMode === 'ai' && (
@@ -814,22 +883,51 @@ const Portofolio: React.FC = () => {
                     >
                       {seedMut.isPending
                         ? <><CSpinner size="sm" className="me-2" />Placing orders…</>
-                        : seedMode === 'ai' ? '🤖 Seed with AI Weights' : '🌱 Seed Paper Account'}
+                        : seedMode === 'ai' ? '🤖 Seed with AI Weights'
+                        : seedMode === 'skewed' ? '📊 Seed Skewed Portfolio'
+                        : '🌱 Seed Paper Account'}
                     </CButton>
                     <p style={{ fontSize: 11, color: C.dimmed, marginTop: 10, marginBottom: 0 }}>
                       {seedMode === 'equal'
                         ? '90% of cash · equal weight · DAY market orders'
+                        : seedMode === 'skewed'
+                        ? '90% of cash · tech-heavy concentrated · DAY market orders'
                         : '90% of cash · GNN-optimised weights · DAY market orders'}
                     </p>
                   </div>
                 </Card>
               ) : (
+                <>
+                {liquidationPending && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    background: 'rgba(234,179,8,0.08)', border: `1px solid rgba(234,179,8,0.3)`,
+                    borderRadius: 8, padding: '10px 14px', marginBottom: 12,
+                    fontSize: 12, color: C.neutral,
+                  }}>
+                    <CSpinner size="sm" style={{ color: C.neutral, flexShrink: 0 }} />
+                    <span>Sell orders placed — positions will clear when the market opens. Checking every 5s…</span>
+                  </div>
+                )}
                 <Card style={{ padding: '18px 20px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                     <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' as const }}>
                       Open Positions
                     </div>
-                    <div />
+                    <CButton
+                      color="danger"
+                      variant="outline"
+                      size="sm"
+                      disabled={liquidateMut.isPending}
+                      onClick={() => {
+                        if (window.confirm('Close all positions and cancel all open orders?')) {
+                          liquidateMut.mutate()
+                        }
+                      }}
+                      style={{ fontSize: 11, padding: '3px 10px' }}
+                    >
+                      {liquidateMut.isPending ? <CSpinner size="sm" /> : 'Liquidate All'}
+                    </CButton>
                   </div>
                   {positionsQ.isLoading
                     ? <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}><CSpinner size="sm" /></div>
@@ -841,6 +939,7 @@ const Portofolio: React.FC = () => {
                       />
                   }
                 </Card>
+                </>
               )}
             </>
           ) : (

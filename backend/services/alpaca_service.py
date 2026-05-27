@@ -145,6 +145,14 @@ def seed_portfolio(
     }
 
 
+def liquidate_all() -> dict[str, Any]:
+    """Cancel all open orders and close all positions at market."""
+    client = _get_client()
+    client.cancel_orders()
+    client.close_all_positions(cancel_orders=True)
+    return {"status": "liquidated"}
+
+
 def get_portfolio_history(period: str = "1M") -> dict[str, Any]:
     try:
         from alpaca.trading.requests import GetPortfolioHistoryRequest  # type: ignore[import]

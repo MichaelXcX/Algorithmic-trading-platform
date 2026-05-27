@@ -25,6 +25,16 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return res.json()
 }
 
+async function del<T>(path: string): Promise<T> {
+  const url = new URL(path, BASE_URL)
+  const res = await fetch(url.toString(), { method: 'DELETE' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }))
+    throw new Error(err.detail ?? `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
 // ── News ─────────────────────────────────────────────────────────────────────
 
 export interface Article {
@@ -182,6 +192,9 @@ export interface AlpacaSeedResult {
 
 export const SEED_SYMBOLS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'JPM', 'JNJ', 'XOM', 'META', 'TSLA']
 
+// European blue-chips with US listings (ADRs / direct NYSE-NASDAQ listings)
+export const EUROPE_SEED_SYMBOLS = ['ASML', 'SAP', 'AZN', 'NVS', 'SHEL', 'TTE', 'RIO', 'UL', 'GSK', 'BP']
+
 // ── S&P 500 universe ──────────────────────────────────────────────────────────
 
 export interface Sp500Stock {
@@ -202,6 +215,7 @@ export const alpacaApi = {
   getHistory: (period = '1M') => get<AlpacaHistory>('/alpaca/history', { period }),
   seed: (symbols = SEED_SYMBOLS, use_fraction = 0.9, weights?: number[]) =>
     post<AlpacaSeedResult>('/alpaca/seed', { symbols, use_fraction, ...(weights ? { weights } : {}) }),
+  liquidate: () => del<{ status: string }>('/alpaca/positions'),
 }
 
 // ── HMM ───────────────────────────────────────────────────────────────────────
